@@ -3,9 +3,9 @@ project(DaedalusX64)
 
 set(CMAKE_CXX_STANDARD 17)
 set(CMAKE_BUILD_TYPE Release)
-
+set(CMAKE_SYSTEM_PROCESSOR "aarch64")
 # Detectando arquitetura e sistema
-if(${CMAKE_SYSTEM_PROCESSOR} STREQUAL "aarch64" AND CMAKE_SYSTEM_NAME STREQUAL "Linux")
+if(CMAKE_SYSTEM_PROCESSOR MATCHES "aarch64|arm64")
     message(STATUS "Target: Linux aarch64 (S905X3)")
 
     # Ativar GLES
