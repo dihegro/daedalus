@@ -1,104 +1,85 @@
-# DaedalusX64 CMake Build File - S905X3/ARM64 Optimized
-set(CMAKE_CXX_STANDARD 17)  # Alterado de 23 para 17 para compatibilidade
+cmake_minimum_required(VERSION 3.10)
+project(DaedalusX64)
 
-# Configurações específicas para ARM64
-if(CMAKE_SYSTEM_PROCESSOR STREQUAL "aarch64" AND CMAKE_SYSTEM_NAME STREQUAL "Linux")
-    message("ARM64 Linux Detected - Configurando para S905X3")
-    
-    # Configurações de otimização para Cortex-A55/A73
-    add_compile_options(
-        -march=armv8-a+crc+fp+simd
-        -mtune=cortex-a73.cortex-a53
-        -mno-outline-atomics
-        -O3
-        -fomit-frame-pointer
-    )
-    add_link_options(-Wl,-z,noexecstack)
-    
-    # Configurações específicas para GLES
-    set(DAEDALUS_GLES ON CACHE BOOL "OpenGL ES Renderer" FORCE)
-    set(DAEDALUS_GL OFF CACHE BOOL "OpenGL Renderer" FORCE)
-    set(DAEDALUS_SDL ON CACHE BOOL "SDL Build" FORCE)
-    set(DAEDALUS_POSIX ON CACHE BOOL "Posix specific options" FORCE)
-    
-    # Habilitar dynarec para ARM64
-    set(DAEDALUS_ENABLE_DYNAREC ON CACHE BOOL "Enable Dynarec" FORCE)
-    message("ARM64 Dynarec Enabled")
-endif()
+set(CMAKE_CXX_STANDARD 17)
+set(CMAKE_BUILD_TYPE Release)
 
-# Configurações básicas de build
-if(CMAKE_BUILD_TYPE STREQUAL "Debug")
-    message("Debug Build")
-    set(CMAKE_INTERPROCEDURAL_OPTIMIZATION FALSE)
-    add_compile_definitions(DAEDALUS_CONFIG_VERSION="Dev")
+# Detectando arquitetura e sistema
+if(${CMAKE_SYSTEM_PROCESSOR} STREQUAL "aarch64" AND CMAKE_SYSTEM_NAME STREQUAL "Linux")
+    message(STATUS "Target: Linux aarch64 (S905X3)")
+
+    # Ativar GLES
+    option(DAEDALUS_GLES "OpenGLES Renderer" ON)
+    option(DAEDALUS_GL "OpenGL Renderer" OFF)
+
+    # SDL para Linux
+    option(DAEDALUS_SDL "Enable SDL2" ON)
+    option(DAEDALUS_POSIX "Enable POSIX features" ON)
+
+    # Dynarec OFF por enquanto
+    option(DAEDALUS_ENABLE_DYNAREC "Enable Dynarec" OFF)
+
+    # Recursos úteis
+    option(DAEDALUS_ACCURATE_TMEM "Accurate TMEM" ON)
+    option(DAEDALUS_128BIT_MULT "128 Bit Multiplication" ON)
+    option(DAEDALUS_ACCURATE_CVT "Accurate Floating Point Conversion" ON)
 else()
-    message("Release Build")
-    set(CMAKE_INTERPROCEDURAL_OPTIMIZATION TRUE)
-    add_compile_definitions(DAEDALUS_CONFIG_VERSION="Release")
-    add_compile_definitions(NDEBUG)
+    message(FATAL_ERROR "Este CMakeLists.txt foi modificado apenas para Linux aarch64 (S905X3)")
 endif()
 
-# Configurações de plataforma
-option(DAEDALUS_ACCURATE_TMEM "Accurate TMEM" ON)
-option(DAEDALUS_128BIT_MULT "128 Bit Multiplication" ON)
-option(DAEDALUS_COMPRESSED_ROM_SUPPORT "Enable Compressed ROM Support" ON)
+# Endian
+include(TestBigEndian)
+TEST_BIG_ENDIAN(IS_BIG_ENDIAN)
+if(IS_BIG_ENDIAN)
+    option(DAEDALUS_ENDIAN_BIG "Big Endian Processor" ON)
+else()
+    option(DAEDALUS_ENDIAN_LITTLE "Little Endian Processor" ON)
+endif()
 
-# Configurações de renderização
+# Diretórios
+include_directories("${PROJECT_SOURCE_DIR}/Source")
+
+# SDL2
+if(DAEDALUS_SDL)
+    find_package(SDL2 REQUIRED)
+    link_libraries(SDL2::SDL2)
+endif()
+
+# GLES
 if(DAEDALUS_GLES)
     find_package(OpenGL REQUIRED)
-    find_library(GLESv2_LIBRARY GLESv2)
-    find_path(GLES2_INCLUDE_DIR GLES2/gl2.h)
-    
-    if(NOT TARGET OpenGLES::GLES2)
-        add_library(OpenGLES::GLES2 UNKNOWN IMPORTED)
-        set_target_properties(OpenGLES::GLES2 PROPERTIES
-            IMPORTED_LOCATION "${GLESv2_LIBRARY}"
-            INTERFACE_INCLUDE_DIRECTORIES "${GLES2_INCLUDE_DIR}"
-        )
-    endif()
+    link_libraries(OpenGL::GL)
 endif()
 
-# Configurações do SDL
-find_package(SDL2 REQUIRED)
-find_package(SDL2_ttf)
-link_libraries(SDL2::SDL2)
-if(SDL2_ttf_FOUND)
-    link_libraries(SDL2_ttf::SDL2_ttf)
-endif()
-
-# Bibliotecas essenciais
+# PNG e Zlib
 find_package(PNG REQUIRED)
+link_libraries(PNG::PNG)
+
 find_package(ZLIB REQUIRED)
+link_libraries(ZLIB::ZLIB)
 
-# Estrutura de diretórios
-include_directories(BEFORE 
-    ${PROJECT_SOURCE_DIR}/Source
-    ${SDL2_INCLUDE_DIRS}
-    ${GLES2_INCLUDE_DIR}
-)
-
-# Subdiretórios principais
+# Diretórios fonte
 add_subdirectory(Core)
+add_subdirectory(Debug)
 add_subdirectory(DynaRec)
+add_subdirectory(Graphics)
+add_subdirectory(HLEAudio)
 add_subdirectory(HLEGraphics)
+add_subdirectory(Interface)
+add_subdirectory(Input)
+add_subdirectory(Math)
+add_subdirectory(OSHLE)
+add_subdirectory(RomFile)
 add_subdirectory(System)
+add_subdirectory(Utility)
+add_subdirectory(UI)
+add_subdirectory(SysPosix)
+add_subdirectory(SysGLES)
 
-# Subdiretórios específicos para GLES
-if(DAEDALUS_GLES)
-    add_subdirectory(SysGLES)
-endif()
+# Executável
+add_executable(daedalus)
 
-# Executável principal
-add_executable(daedalus ${plat_main})
-target_link_libraries(daedalus PRIVATE
-    ${daed_libs}
-    ${default_libraries}
-    OpenGLES::GLES2
-    SDL2::SDL2
-    ${SDL2_TTF_LIBRARIES}
-    PNG::PNG
-    ZLIB::ZLIB
-)
+target_link_libraries(daedalus PRIVATE ${daed_libs})
 
 # Instalação
 install(DIRECTORY ${PROJECT_BINARY_DIR}/../Data/ DESTINATION DaedalusX64)
